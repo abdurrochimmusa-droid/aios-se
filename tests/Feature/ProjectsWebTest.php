@@ -33,6 +33,7 @@ class ProjectsWebTest extends TestCase
         $viewer = User::factory()->create(['role' => UserRole::Viewer]);
         $room = Room::factory()->create();
         $project = Project::factory()->create(['room_id' => $room->id]);
+        $project->members()->create(['user_id' => $viewer->id, 'role' => UserRole::Viewer]);
 
         $this->actingAs($viewer)->get(route('projects.index'))->assertOk()->assertSee($project->name);
         $this->actingAs($viewer)->get(route('projects.show', $project))->assertOk()->assertSee('Linimasa tahap');
@@ -43,6 +44,7 @@ class ProjectsWebTest extends TestCase
         $owner = $this->owner();
         $approver = User::factory()->create(['role' => UserRole::Approver]);
         $project = Project::factory()->create(['room_id' => Room::factory()->create()->id, 'status' => ProjectStatus::Running, 'owner_id' => $owner->id]);
+        $project->members()->create(['user_id' => $approver->id, 'role' => UserRole::Approver]);
         $approval = Approval::create(['project_id' => $project->id, 'stage' => 'prd', 'requested_by' => $owner->id]);
 
         $this->actingAs($approver)

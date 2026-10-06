@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Aios\CommandExecutor;
+use App\Services\Aios\NaturalCommandTranslator;
 use Illuminate\Console\Command;
 
 class AiosCommand extends Command
@@ -15,20 +16,28 @@ class AiosCommand extends Command
 
     protected $description = 'Perintah satu baris AIOS-SE untuk room, agen, role, dan proyek';
 
-    public function handle(CommandExecutor $executor): int
+    public function handle(CommandExecutor $executor, NaturalCommandTranslator $translator): int
     {
         $input = implode(' ', (array) $this->argument('input'));
         $parsed = $executor->parse($input);
+        $wasNatural = false;
 
         if ($parsed['type'] === 'empty') {
             return $this->failWith('Perintah kosong. Contoh: aios room add \'IT Team\'.');
         }
 
         if ($parsed['type'] === 'natural') {
-            $executor->recordPreview($parsed);
-            $message = 'Bahasa alami diterjemahkan menjadi perintah formal, lalu dijalankan setelah konfirmasi. Penerjemah model (9Router) hadir di Fase 1 — untuk sekarang pakai sintaks formal.';
+            $translation = $translator->translate($input);
 
-            return $this->failWith($message, 2);
+            if (! $translation['ok']) {
+                $executor->recordPreview($parsed);
+
+                return $this->failWith($translation['message'], 2);
+            }
+
+            $parsed = $translation['parsed'];
+            $wasNatural = true;
+            $this->line('Diterjemahkan menjadi: '.$parsed['raw']);
         }
 
         if ($parsed['type'] === 'invalid') {
@@ -59,7 +68,7 @@ class AiosCommand extends Command
             }
         }
 
-        if ($executor->isDestructive($parsed) && ! $this->option('force')) {
+        if (($executor->isDestructive($parsed) || $wasNatural) && ! $this->option('force')) {
             if (! $this->confirm('Perintah ini mengubah arsip/hubungan/data. Jalankan?')) {
                 $executor->recordCancel($parsed);
                 $this->line('Dibatalkan, tidak ada yang berubah.');

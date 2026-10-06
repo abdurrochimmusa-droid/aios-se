@@ -27,10 +27,22 @@ use App\Services\SettingsService;
 class Orchestrator
 {
     /**
+     * Alur yang dipakai proyek: salinan kustom bila ada, else bawaan config.
+     *
+     * @return list<array{stage: string, title: string, step: int, gate: ?string, outputs: list<string>}>
+     */
+    public function pipelineFor(Project $project): array
+    {
+        return $project->stages ?? config('aios.pipeline');
+    }
+
+    /**
      * @return array{planned: int, unassigned: list<string>}
      */
     public function plan(Project $project): array
     {
+        $project->refresh();
+
         if ($project->tasks()->exists()) {
             return ['planned' => 0, 'unassigned' => []];
         }
@@ -39,7 +51,7 @@ class Orchestrator
         $planned = 0;
         $unassigned = [];
 
-        foreach (config('aios.pipeline') as $entry) {
+        foreach ($this->pipelineFor($project) as $entry) {
             $agent = $this->matchAgent($project, $entry['outputs']);
             $inputs = $this->stageInputs($project, $entry['step']);
 
@@ -96,7 +108,7 @@ class Orchestrator
     public function onTaskDone(Task $task): void
     {
         $task->refresh();
-        $entry = $this->pipelineEntry($task->stage);
+        $entry = $this->pipelineEntry($task->project, $task->stage);
 
         if ($entry !== null && ($entry['gate'] ?? null) !== null) {
             $task->status = TaskStatus::WaitingApproval;
@@ -238,6 +250,91 @@ class Orchestrator
         $this->dispatchNext($task->project);
     }
 
+    /**
+     * Ubah urutan/hapus tahap per proyek (FR-14). Hanya sebelum tahap
+     * berjalan: alur yang sudah bergerak tidak bisa disusun ulang.
+     *
+     * @throws CommandException
+     */
+    public function editableStages(Project $project): array
+    {
+        if ($project->tasks()->whereNot('status', TaskStatus::Queued)->exists()) {
+            throw new CommandException('Alur tak bisa diubah karena tahap sudah berjalan.');
+        }
+
+        if ($project->stages === null) {
+            $project->stages = config('aios.pipeline');
+            $project->save();
+        }
+
+        return $project->stages;
+    }
+
+    /** @throws CommandException */
+    public function moveStage(Project $project, string $stage, int $direction): void
+    {
+        $stages = array_values($this->editableStages($project));
+        $index = collect($stages)->search(fn ($entry) => $entry['stage'] === $stage);
+
+        if ($index === false) {
+            throw new CommandException("Tahap '{$stage}' tidak ada di alur proyek ini.");
+        }
+
+        $other = $index + $direction;
+
+        if (! isset($stages[$other])) {
+            return;
+        }
+
+        [$stages[$index], $stages[$other]] = [$stages[$other], $stages[$index]];
+        $stages = $this->renumberSteps($stages);
+
+        $project->stages = $stages;
+        $project->save();
+    }
+
+    /** @throws CommandException */
+    public function removeStage(Project $project, string $stage): void
+    {
+        $stages = array_values($this->editableStages($project));
+        $kept = array_values(array_filter($stages, fn ($entry) => $entry['stage'] !== $stage));
+
+        if (count($kept) === count($stages)) {
+            throw new CommandException("Tahap '{$stage}' tidak ada di alur proyek ini.");
+        }
+
+        $project->stages = $this->renumberSteps($kept);
+        $project->save();
+    }
+
+    public function resetStages(Project $project): void
+    {
+        if ($project->tasks()->whereNot('status', TaskStatus::Queued)->exists()) {
+            throw new CommandException('Alur tak bisa diubah karena tahap sudah berjalan.');
+        }
+
+        $project->stages = null;
+        $project->save();
+    }
+
+    /** @param list<array> $stages */
+    private function renumberSteps(array $stages): array
+    {
+        $step = 0;
+        $previous = null;
+
+        foreach ($stages as $i => $entry) {
+            if ($entry['step'] !== $previous) {
+                $step++;
+                $previous = $entry['step'];
+            }
+
+            $stages[$i]['step'] = $step;
+        }
+
+        return $stages;
+    }
+
     private function matchAgent(Project $project, array $outputs): ?Agent
     {
         foreach ($project->room->agents as $agent) {
@@ -264,9 +361,9 @@ class Orchestrator
             ->all();
     }
 
-    private function pipelineEntry(string $stage): ?array
+    private function pipelineEntry(Project $project, string $stage): ?array
     {
-        foreach (config('aios.pipeline') as $entry) {
+        foreach ($this->pipelineFor($project) as $entry) {
             if ($entry['stage'] === $stage) {
                 return $entry;
             }

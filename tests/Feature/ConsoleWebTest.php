@@ -42,6 +42,7 @@ class ConsoleWebTest extends TestCase
 
     public function test_natural_language_gets_guidance(): void
     {
+        // Tanpa API key, penerjemah mengembalikan pesan konfigurasi.
         $this->post(route('console.preview'), ['input' => 'Tambahkan Security'])
             ->assertRedirect(route('console.index'))
             ->assertSessionHasErrors('input');

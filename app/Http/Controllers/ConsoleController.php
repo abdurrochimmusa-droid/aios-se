@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CommandHistory;
 use App\Services\Aios\CommandExecutor;
+use App\Services\Aios\NaturalCommandTranslator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -17,17 +18,25 @@ class ConsoleController extends Controller
         ]);
     }
 
-    public function preview(Request $request, CommandExecutor $executor): View|RedirectResponse
+    public function preview(Request $request, CommandExecutor $executor, NaturalCommandTranslator $translator): View|RedirectResponse
     {
         $validated = $request->validate(['input' => ['required', 'string', 'max:2000']]);
         $parsed = $executor->parse($validated['input']);
+        $translatedFrom = null;
 
         if ($parsed['type'] === 'natural') {
-            $executor->recordPreview($parsed);
+            $translation = $translator->translate($validated['input']);
 
-            return redirect()->route('console.index')
-                ->withInput()
-                ->withErrors(['input' => 'Bahasa alami diterjemahkan menjadi perintah formal dulu (penerjemah model hadir di Fase 1). Untuk sekarang pakai sintaks formal, mis. room add \'IT Team\'.']);
+            if (! $translation['ok']) {
+                $executor->recordPreview($parsed);
+
+                return redirect()->route('console.index')
+                    ->withInput()
+                    ->withErrors(['input' => $translation['message']]);
+            }
+
+            $parsed = $translation['parsed'];
+            $translatedFrom = $validated['input'];
         }
 
         if (($parsed['type'] ?? '') !== 'command') {
@@ -47,7 +56,8 @@ class ConsoleController extends Controller
         return view('console.index', [
             'histories' => CommandHistory::latest()->limit(15)->get(),
             'preview' => $preview,
-            'rawInput' => $validated['input'],
+            'rawInput' => $parsed['raw'],
+            'translatedFrom' => $translatedFrom,
             'destructive' => $executor->isDestructive($parsed),
         ]);
     }

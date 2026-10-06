@@ -20,6 +20,10 @@
  @isset($preview)
  <div class="rounded-md border border-brand-600/40 bg-white p-4 ">
  <h2 class="mb-1 font-semibold">Pratinjau</h2>
+ @isset($translatedFrom)
+ <p class="mb-1 text-xs text-zinc-500 ">Diterjemahkan dari: “{{ $translatedFrom }}”</p>
+ <p class="mb-3 font-mono text-sm ">{{ $rawInput }}</p>
+ @endisset
  <p class="mb-3 text-sm">{{ $preview['message'] }}</p>
  @if ($destructive)
  <p class="mb-3 text-sm font-medium text-amber-700 ">Perintah ini mengubah arsip/hubungan/data — pastikan sudah benar.</p>

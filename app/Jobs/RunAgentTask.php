@@ -64,6 +64,18 @@ class RunAgentTask implements ShouldQueue
             return;
         }
 
+        $projectBudget = $task->project->token_budget;
+
+        if ($projectBudget !== null && $task->project->costs()->sum('tokens_in') + $task->project->costs()->sum('tokens_out') >= $projectBudget) {
+            $task->project->status = ProjectStatus::Paused;
+            $task->project->save();
+            $task->status = TaskStatus::Paused;
+            $task->error = "Anggaran proyek {$projectBudget} token tercapai; proyek dijeda.";
+            $task->save();
+
+            return;
+        }
+
         $task->status = TaskStatus::Running;
         $task->started_at ??= now();
         $task->attempts++;

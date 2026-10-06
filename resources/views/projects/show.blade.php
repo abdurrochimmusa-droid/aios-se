@@ -57,6 +57,36 @@
  </section>
  @endif
 
+ <section class="rounded-md border border-zinc-200 bg-white p-4 ">
+ <div class="mb-2 flex items-center justify-between gap-3">
+ <h2 class="font-semibold ">Alur tahap @if ($customPipeline)<span class="ml-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-normal ">kustom</span>@endif</h2>
+ @can('manage', $project)
+ @if ($project->tasks->isEmpty())
+ <form method="POST" action="{{ route('projects.stages.reset', $project) }}">@csrf<button class="text-xs text-zinc-500 hover:underline ">Kembalikan bawaan</button></form>
+ @endif
+ @endcan
+ </div>
+ <p class="mb-3 text-xs text-zinc-500 ">Anggaran proyek: {{ $project->token_budget ? number_format($project->token_budget).' token · terpakai '.number_format($tokensSpent) : 'mengikuti anggaran per tugas' }}.</p>
+ <ol class="flex flex-col gap-1">
+ @foreach ($pipeline as $entry)
+ <li class="flex items-center justify-between gap-3 rounded-md bg-zinc-50 px-3 py-1.5 text-sm ">
+ <span>{{ $entry['title'] }} <span class="text-xs text-zinc-400">({{ $entry['stage'] }}{{ $entry['gate'] ? ' · gerbang '.$entry['gate'] : '' }})</span></span>
+ @can('manage', $project)
+ @if ($project->tasks->isEmpty())
+ <span class="flex shrink-0 gap-1">
+ <form method="POST" action="{{ route('projects.stages.move', [$project, $entry['stage'], 'up']) }}">@csrf<button class="rounded-md px-2 py-0.5 text-xs hover:bg-zinc-200 " title="Naik">↑</button></form>
+ <form method="POST" action="{{ route('projects.stages.move', [$project, $entry['stage'], 'down']) }}">@csrf<button class="rounded-md px-2 py-0.5 text-xs hover:bg-zinc-200 " title="Turun">↓</button></form>
+ <form method="POST" action="{{ route('projects.stages.remove', [$project, $entry['stage']]) }}" onsubmit="return confirm('Hapus tahap {{ $entry['title'] }} dari alur?');">@csrf @method('DELETE')<button class="rounded-md px-2 py-0.5 text-xs text-rose-600 hover:bg-rose-50 " title="Hapus">×</button></form>
+ </span>
+ @endif
+ @endcan
+ </li>
+ @endforeach
+ </ol>
+ @if ($project->tasks->isNotEmpty())
+ <p class="mt-2 text-xs text-zinc-400 ">Alur dikunci karena tahap sudah berjalan.</p>
+ @endif
+ </section>
  <section class="overflow-hidden rounded-md border border-zinc-200 bg-white ">
  <h2 class="border-b border-zinc-200 px-4 py-3 font-semibold ">Linimasa tahap</h2>
  <table class="w-full text-left text-sm">
@@ -93,5 +123,30 @@
  </tbody>
  </table>
  </section>
+ @can('manage', $project)
+ <section class="rounded-md border border-zinc-200 bg-white p-4 ">
+ <h2 class="mb-3 font-semibold ">Anggota ({{ $project->members->count() }})</h2>
+ @if ($project->members->isNotEmpty())
+ <ul class="mb-3 flex flex-col gap-2">
+ @foreach ($project->members as $member)
+ <li class="flex items-center justify-between gap-3 rounded-md bg-zinc-50 px-3 py-2 text-sm ">
+ <span>{{ $member->user->email }} · {{ $member->role->value }}</span>
+ <form method="POST" action="{{ route('projects.members.destroy', [$project, $member]) }}">@csrf @method('DELETE')<button class="text-xs text-rose-600 hover:underline ">Cabut</button></form>
+ </li>
+ @endforeach
+ </ul>
+ @endif
+ <form method="POST" action="{{ route('projects.members.store', $project) }}" class="grid gap-2 sm:grid-cols-3">
+ @csrf
+ <input name="email" type="email" required maxlength="255" placeholder="email@contoh.id" class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm ">
+ <select name="role" required class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm ">
+ <option value="viewer">viewer</option>
+ <option value="approver">approver</option>
+ <option value="manager">manager</option>
+ </select>
+ <button class="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">+ Tambah</button>
+ </form>
+ </section>
+ @endcan
 </div>
 @endsection
