@@ -24,7 +24,7 @@ return [
     | Produksi (CT AIOS-SE): /var/www/folder-proyek/NAMA-PROYEK
     | Dev Windows: storage/app/projects (override via .env)
     */
-    'projects_root' => env('AIOS_PROJECTS_ROOT', storage_path('app/projects')),
+    'projects_root' => env('AIOS_PROJECTS_ROOT') ?: storage_path('app/projects'),
     'artifacts_dir' => env('AIOS_ARTIFACTS_DIR', 'artefak'),
 
     /*

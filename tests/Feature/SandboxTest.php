@@ -69,6 +69,16 @@ class SandboxTest extends TestCase
         $this->assertArrayHasKey('artefak', $report['checks']);
     }
 
+    public function test_empty_env_falls_back_to_storage_path(): void
+    {
+        config(['aios.projects_root' => '']);
+        $project = Project::factory()->create(['room_id' => Room::factory()->create()->id, 'slug' => 'demo', 'repo_path' => null]);
+
+        $path = app(GitService::class)->repoPath($project);
+
+        $this->assertSame(storage_path('app/projects').'/demo', $path);
+    }
+
     public function test_verify_fails_when_disk_differs_from_db(): void
     {
         $project = Project::factory()->create(['room_id' => Room::factory()->create()->id, 'slug' => 'demo']);
