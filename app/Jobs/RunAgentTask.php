@@ -132,6 +132,7 @@ class RunAgentTask implements ShouldQueue
             $task->status = TaskStatus::Done;
             $task->completed_at = now();
             $task->error = null;
+            $task->revision_note = null;
             $task->save();
         });
 
@@ -177,6 +178,10 @@ class RunAgentTask implements ShouldQueue
             fn (Artifact $a) => "### {$a->type} v{$a->version}: {$a->title}\n".mb_substr($a->body ?? '', 0, 8000)
         )->implode("\n\n");
 
+        $revision = trim((string) ($task->revision_note ?? '')) !== ''
+            ? "\n\nREVISI YANG DIMINTA MANUSIA (wajib dipenuhi, hasil sebelumnya salah):\n{$task->revision_note}"
+            : '';
+
         return [
             [
                 'role' => 'system',
@@ -184,7 +189,7 @@ class RunAgentTask implements ShouldQueue
             ],
             [
                 'role' => 'user',
-                'content' => "Ide proyek: {$task->project->idea}\nTahap: {$task->title}\n\nBahan serah terima:\n{$context}",
+                'content' => "Ide proyek: {$task->project->idea}\nTahap: {$task->title}\n\nBahan serah terima:\n{$context}{$revision}",
             ],
         ];
     }

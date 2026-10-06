@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\ProjectStatus;
+use App\Enums\TaskStatus;
 use App\Enums\UserRole;
 use App\Jobs\RunAgentTask;
 use App\Models\Cost;
@@ -147,5 +148,54 @@ class RemainingScopeTest extends TestCase
         $job->handle(app(Orchestrator::class), app(NineRouterClient::class), app(SettingsService::class), app(GitService::class), app(SandboxService::class));
 
         $this->assertSame(ProjectStatus::Paused, $project->fresh()->status);
+    }
+
+    public function test_revise_requeues_with_note_and_bumps_version(): void
+    {
+        config([
+            'aios.nine_router.base_url' => 'https://nine.test/v1',
+            'aios.nine_router.api_key' => 'test-key',
+            'aios.projects_root' => sys_get_temp_dir().'/aios-revise-test',
+        ]);
+        Http::fake(['*' => Http::response([
+            'model' => 'combo-test',
+            'choices' => [['message' => ['content' => 'hasil revisi']]],
+            'usage' => ['prompt_tokens' => 10, 'completion_tokens' => 5],
+        ])]);
+        $this->seed(RoleSeeder::class);
+
+        $room = Room::factory()->create();
+        $role = Role::where('slug', 'senior-data-analyst')->first();
+        $agent = $room->agents()->create(['slug' => 'analyst-1', 'name' => 'A', 'role_id' => $role->id]);
+        $project = Project::factory()->create(['room_id' => $room->id, 'status' => ProjectStatus::Running]);
+        $task = $project->tasks()->create(['stage' => 'analysis-report', 'title' => 'A', 'step' => 1, 'agent_id' => $agent->id, 'status' => TaskStatus::Failed, 'error' => 'Salah.']);
+
+        app(Orchestrator::class)->revise($task, 'Tambahkan aktor admin.');
+        $this->assertSame(TaskStatus::Queued, $task->fresh()->status);
+
+        Http::assertSentCount(0);
+        $job = new RunAgentTask($task->fresh());
+        $job->handle(app(Orchestrator::class), app(NineRouterClient::class), app(SettingsService::class), app(GitService::class), app(SandboxService::class));
+
+        // Prompt ke model memuat catatan revisi.
+        Http::assertSent(fn ($request) => str_contains($request->data()['messages'][1]['content'], 'Tambahkan aktor admin'));
+
+        $task->refresh();
+        $this->assertSame(TaskStatus::Done, $task->status);
+        $this->assertNull($task->revision_note);
+        $this->assertSame(1, $project->artifacts()->where('type', 'analysis-report')->where('version', 1)->count());
+    }
+
+    public function test_web_revise_form(): void
+    {
+        $owner = User::factory()->create(['role' => UserRole::Owner]);
+        $project = Project::factory()->create(['room_id' => Room::factory()->create()->id, 'status' => ProjectStatus::Running]);
+        $task = $project->tasks()->create(['stage' => 'prd', 'title' => 'PRD', 'step' => 3, 'status' => TaskStatus::Failed, 'error' => 'Kurang.']);
+
+        $this->actingAs($owner)
+            ->post(route('projects.tasks.revise', [$project, $task]), ['note' => 'Tambahkan kriteria penerimaan.'])
+            ->assertRedirect(route('projects.show', $project));
+
+        $this->assertSame('queued', $task->fresh()->status->value);
     }
 }

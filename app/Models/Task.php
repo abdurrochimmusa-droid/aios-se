@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['project_id', 'stage', 'title', 'step', 'agent_id', 'status', 'inputs', 'output_artifact_id', 'tokens_in', 'tokens_out', 'attempts', 'depth', 'parent_id', 'error', 'started_at', 'completed_at'])]
+#[Fillable(['project_id', 'stage', 'title', 'step', 'agent_id', 'status', 'inputs', 'output_artifact_id', 'tokens_in', 'tokens_out', 'attempts', 'depth', 'parent_id', 'error', 'revision_note', 'started_at', 'completed_at'])]
 class Task extends Model
 {
     /** @use HasFactory<TaskFactory> */

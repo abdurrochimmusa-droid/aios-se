@@ -4,12 +4,14 @@ namespace App\Services\Aios;
 
 use App\Enums\AgentStatus;
 use App\Enums\RoomStatus;
+use App\Enums\TaskStatus;
 use App\Models\Agent;
 use App\Models\AuditLog;
 use App\Models\CommandHistory;
 use App\Models\Project;
 use App\Models\Role;
 use App\Models\Room;
+use App\Models\Task;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -51,8 +53,11 @@ class CommandExecutor
                 'agent.add' => $this->previewAgentAdd($parsed),
                 'agent.set' => $this->previewAgentSet($parsed),
                 'agent.remove' => $this->previewAgentRemove($parsed),
+                'agent.show' => $this->previewAgentShow($parsed),
                 'role.add' => $this->previewRoleAdd($parsed),
                 'project.run' => $this->previewProjectRun($parsed),
+                'project.progress' => $this->previewProjectProgress($parsed),
+                'task.revise' => $this->previewTaskRevise($parsed),
                 default => $this->fail('Perintah tidak didukung.'),
             };
         } catch (CommandException $e) {
@@ -73,8 +78,11 @@ class CommandExecutor
                 'agent.add' => $this->runAgentAdd($parsed),
                 'agent.set' => $this->runAgentSet($parsed),
                 'agent.remove' => $this->runAgentRemove($parsed),
+                'agent.show' => $this->previewAgentShow($parsed),
                 'role.add' => $this->runRoleAdd($parsed),
                 'project.run' => $this->runProjectRun($parsed),
+                'project.progress' => $this->previewProjectProgress($parsed),
+                'task.revise' => $this->runTaskRevise($parsed),
                 default => $this->fail('Perintah tidak didukung.'),
             });
         } catch (CommandException $e) {
@@ -459,6 +467,92 @@ class CommandExecutor
             'message' => "Agen '{$agent->slug}' dinonaktifkan.",
             'data' => $preview['data'],
         ];
+    }
+
+    private function previewAgentShow(array $parsed): array
+    {
+        $slug = $parsed['positional'][0] ?? throw new CommandException('Slug agen wajib: agent show backend-dev-1.');
+        $options = $parsed['options'];
+        $agent = isset($options['room']) ? $this->findAgent($slug, (string) $options['room']) : $this->findAgent($slug);
+        $agent->loadMissing('role', 'room');
+
+        $tasks = Task::with('project')->whereBelongsTo($agent, 'agent')->latest()->limit(20)->get();
+        $total = Task::whereBelongsTo($agent, 'agent')->count();
+        $done = Task::whereBelongsTo($agent, 'agent')->where('status', TaskStatus::Done)->count();
+        $tokens = Task::whereBelongsTo($agent, 'agent')->sum('tokens_in') + Task::whereBelongsTo($agent, 'agent')->sum('tokens_out');
+        $percent = $total > 0 ? (int) round($done / $total * 100) : 0;
+
+        $lines = ["Agen '{$agent->slug}' ({$agent->role->name}, Room-{$agent->room->number}, {$agent->status->value})"];
+        $lines[] = "Progres: {$done}/{$total} tahap ({$percent}%), {$tokens} token.";
+
+        foreach ($tasks as $task) {
+            $lines[] = "  [{$task->status->value}] #{$task->id} {$task->project->slug}/{$task->stage}: {$task->title}";
+        }
+
+        return [
+            'ok' => true,
+            'message' => implode(PHP_EOL, $lines),
+            'data' => ['slug' => $agent->slug, 'done' => $done, 'total' => $total, 'percent' => $percent, 'tokens' => $tokens],
+        ];
+    }
+
+    private function findProject(string $ref): Project
+    {
+        return Project::where('slug', $ref)->orWhere('name', $ref)->first()
+            ?? throw new CommandException("Proyek '{$ref}' tidak ditemukan.");
+    }
+
+    private function previewProjectProgress(array $parsed): array
+    {
+        $ref = $parsed['positional'][0] ?? throw new CommandException('Slug proyek wajib: project progress nama-proyek.');
+        $project = $this->findProject($ref);
+        $progress = app(Orchestrator::class)->progress($project);
+
+        $lines = ["Proyek '{$project->name}': {$progress['done']}/{$progress['total']} tahap ({$progress['percent']}%)."];
+
+        foreach ($progress['agents'] as $row) {
+            $lines[] = "  {$row['slug']}: {$row['done']}/{$row['total']} ({$row['percent']}%), {$row['tokens']} token.";
+        }
+
+        return ['ok' => true, 'message' => implode(PHP_EOL, $lines), 'data' => $progress];
+    }
+
+    private function previewTaskRevise(array $parsed): array
+    {
+        [$task, $note] = $this->taskReviseInput($parsed);
+
+        return [
+            'ok' => true,
+            'message' => "Akan merevisi tahap #{$task->id} '{$task->title}' ({$task->status->value}): {$note}",
+            'data' => ['id' => $task->id, 'note' => $note],
+        ];
+    }
+
+    private function runTaskRevise(array $parsed): array
+    {
+        [$task, $note] = $this->taskReviseInput($parsed);
+        app(Orchestrator::class)->revise($task, $note);
+
+        return [
+            'ok' => true,
+            'message' => "Tahap #{$task->id} diantre ulang dengan catatan revisi; versi artefak naik saat selesai.",
+            'data' => ['id' => $task->id],
+        ];
+    }
+
+    /** @return array{Task, string} */
+    private function taskReviseInput(array $parsed): array
+    {
+        $id = $parsed['positional'][0] ?? throw new CommandException("ID tugas wajib: task revise 12 'catatan revisi'.");
+        $note = trim($parsed['positional'][1] ?? '');
+
+        if ($note === '') {
+            throw new CommandException("Catatan revisi wajib: task revise {$id} 'catatan revisi'.");
+        }
+
+        $task = Task::find($id) ?? throw new CommandException("Tugas #{$id} tidak ditemukan.");
+
+        return [$task, $note];
     }
 
     // ---- role ----

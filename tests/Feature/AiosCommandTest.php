@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\RoomStatus;
+use App\Enums\TaskStatus;
 use App\Models\Agent;
 use App\Models\CommandHistory;
 use App\Models\Project;
@@ -139,5 +140,37 @@ class AiosCommandTest extends TestCase
         $this->artisan('aios', ['input' => ['room', 'show', '01']])
             ->expectsOutputToContain('backend-dev-1')
             ->assertExitCode(0);
+    }
+
+    public function test_agent_show_reports_progress(): void
+    {
+        $this->artisan('aios', ['input' => ['room', 'add', "'IT Team'"]])->assertExitCode(0);
+        $this->artisan('aios', ['input' => ['agent', 'add', '--room', '01', '--role', "'Backend Dev'"]])->assertExitCode(0);
+
+        $this->artisan('aios', ['input' => ['agent', 'show', 'backend-dev-1']])
+            ->expectsOutputToContain('Progres: 0/0 tahap (0%)')
+            ->assertExitCode(0);
+    }
+
+    public function test_project_progress_and_task_revise(): void
+    {
+        $this->artisan('aios', ['input' => ['room', 'add', "'IT Team'"]])->assertExitCode(0);
+        $this->artisan('aios', ['input' => ['project', 'run', '--room', '01', "'Demo'"]])->assertExitCode(0);
+
+        $project = Project::where('slug', 'demo')->firstOrFail();
+
+        $this->artisan('aios', ['input' => ['project', 'progress', 'demo']])
+            ->expectsOutputToContain('0/9 tahap (0%)')
+            ->assertExitCode(0);
+
+        $task = $project->tasks()->where('stage', 'analysis-report')->firstOrFail();
+        $task->update(['status' => TaskStatus::Failed, 'error' => 'Salah.']);
+
+        $this->artisan('aios', ['input' => ['task', 'revise', (string) $task->id, "'Tambahkan aktor admin'"]])
+            ->assertExitCode(0);
+
+        $task->refresh();
+        $this->assertSame('queued', $task->status->value);
+        $this->assertSame('Tambahkan aktor admin', $task->revision_note);
     }
 }

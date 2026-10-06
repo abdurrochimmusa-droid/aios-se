@@ -24,8 +24,11 @@ Perintah yang ada:
 - agent add --room NOMOR --role 'Nama Role' [--name NAMA] [--model COMBO]
 - agent set SLUG [--room NOMOR] [--model COMBO] [--role NAMA] [--status active|disabled] [--name NAMA]
 - agent remove SLUG [--room NOMOR]
+- agent show SLUG [--room NOMOR]
 - role add 'Nama' [--desc TEKS] [--tools a,b] [--inputs a,b] [--outputs a,b] [--combo NAMA]
 - project run --room NOMOR 'Judul' [--idea TEKS]
+- project progress SLUG
+- task revise ID_TUGAS 'catatan revisi'
 
 Bila permintaan tak jelas atau di luar daftar, jawab: {"error": "penjelasan singkat"}.
 Contoh: "Tambahkan Security Specialist ke Room-01" →

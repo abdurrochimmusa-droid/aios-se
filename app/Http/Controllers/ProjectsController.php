@@ -53,6 +53,7 @@ class ProjectsController extends Controller
             'pipeline' => $orchestrator->pipelineFor($project),
             'customPipeline' => $project->stages !== null,
             'tokensSpent' => $spent,
+            'agentProgress' => $orchestrator->progress($project),
         ]);
     }
 
@@ -119,6 +120,23 @@ class ProjectsController extends Controller
         $orchestrator->retry($task);
 
         return redirect()->route('projects.show', $project)->with('status', "Tahap {$task->title} diantre ulang.");
+    }
+
+    public function revise(Request $request, Project $project, Task $task, Orchestrator $orchestrator): RedirectResponse
+    {
+        abort_unless($task->project_id === $project->id, 404);
+        $this->authorize('manage', $project);
+        $validated = $request->validate(['note' => ['required', 'string', 'max:2000']]);
+
+        try {
+            $orchestrator->revise($task, $validated['note']);
+        } catch (CommandException $e) {
+            return back()->withErrors(['revision' => $e->getMessage()]);
+        }
+
+        $orchestrator->resume($project);
+
+        return redirect()->route('projects.show', $project)->with('status', "Tahap {$task->title} direvisi dan diantre ulang.");
     }
 
     public function storeMember(Request $request, Project $project): RedirectResponse

@@ -19,9 +19,10 @@ class CommandParser
 {
     private const DOMAINS = [
         'room' => ['add', 'show', 'link', 'unlink', 'archive'],
-        'agent' => ['add', 'set', 'remove'],
+        'agent' => ['add', 'set', 'remove', 'show'],
         'role' => ['add'],
-        'project' => ['run'],
+        'project' => ['run', 'progress'],
+        'task' => ['revise'],
     ];
 
     public function parse(string $input): array

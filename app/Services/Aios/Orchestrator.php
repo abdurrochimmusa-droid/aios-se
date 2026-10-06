@@ -251,6 +251,62 @@ class Orchestrator
     }
 
     /**
+     * Perintah revisi manusia saat hasil tahap salah: tugas diantre ulang
+     * dengan catatan yang dibaca agen. Versi artefak naik saat selesai.
+     */
+    public function revise(Task $task, string $note): void
+    {
+        $note = trim($note);
+
+        if ($note === '') {
+            throw new CommandException('Catatan revisi wajib diisi.');
+        }
+
+        if (! in_array($task->status, [TaskStatus::Failed, TaskStatus::Done, TaskStatus::Paused], true)) {
+            throw new CommandException("Tahap '{$task->title}' berstatus {$task->status->value}; revisi hanya untuk yang gagal/selesai/dijeda.");
+        }
+
+        $task->status = TaskStatus::Queued;
+        $task->error = null;
+        $task->revision_note = $note;
+        $task->save();
+    }
+
+    /**
+     * Progres pengerjaan: total proyek + per agen (selesai/total/persen).
+     *
+     * @return array{total: int, done: int, percent: int, agents: list<array{slug: string, name: string, total: int, done: int, percent: int, tokens: int}>}
+     */
+    public function progress(Project $project): array
+    {
+        $tasks = $project->tasks()->with('agent')->get();
+        $total = $tasks->count();
+        $done = $tasks->where('status', TaskStatus::Done)->count();
+
+        $agents = $tasks->groupBy('agent_id')->map(function ($group) {
+            $first = $group->first();
+            $count = $group->count();
+            $finished = $group->where('status', TaskStatus::Done)->count();
+
+            return [
+                'slug' => $first->agent?->slug ?? 'tanpa-agen',
+                'name' => $first->agent?->name ?? 'Tanpa agen',
+                'total' => $count,
+                'done' => $finished,
+                'percent' => $count > 0 ? (int) round($finished / $count * 100) : 0,
+                'tokens' => $group->sum('tokens_in') + $group->sum('tokens_out'),
+            ];
+        })->values()->all();
+
+        return [
+            'total' => $total,
+            'done' => $done,
+            'percent' => $total > 0 ? (int) round($done / $total * 100) : 0,
+            'agents' => $agents,
+        ];
+    }
+
+    /**
      * Ubah urutan/hapus tahap per proyek (FR-14). Hanya sebelum tahap
      * berjalan: alur yang sudah bergerak tidak bisa disusun ulang.
      *

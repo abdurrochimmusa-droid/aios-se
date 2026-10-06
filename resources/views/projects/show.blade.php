@@ -87,6 +87,24 @@
  <p class="mt-2 text-xs text-zinc-400 ">Alur dikunci karena tahap sudah berjalan.</p>
  @endif
  </section>
+ @if ($agentProgress['total'] > 0)
+ <section class="rounded-md border border-zinc-200 bg-white p-4 ">
+ <h2 class="mb-3 font-semibold ">Progres agen</h2>
+ <ul class="grid gap-2 sm:grid-cols-2">
+ @foreach ($agentProgress['agents'] as $row)
+ <li class="rounded-md bg-zinc-50 px-3 py-2 text-sm ">
+ <div class="flex items-center justify-between gap-2">
+ <span class="font-medium">{{ $row['slug'] }}</span>
+ <span class="text-xs text-zinc-500 ">{{ $row['done'] }}/{{ $row['total'] }} · {{ $row['percent'] }}% · {{ number_format($row['tokens']) }} token</span>
+ </div>
+ <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-200 ">
+ <div class="h-full rounded-full bg-brand-600" style="width: {{ $row['percent'] }}%"></div>
+ </div>
+ </li>
+ @endforeach
+ </ul>
+ </section>
+ @endif
  <section class="overflow-hidden rounded-md border border-zinc-200 bg-white ">
  <h2 class="border-b border-zinc-200 px-4 py-3 font-semibold ">Linimasa tahap</h2>
  <table class="w-full text-left text-sm">
@@ -116,6 +134,16 @@
  <td class="px-4 py-3 text-right">
  @if (in_array($task->status, [\App\Enums\TaskStatus::Failed, \App\Enums\TaskStatus::Paused], true) && in_array(auth()->user()->role, [\App\Enums\UserRole::Owner, \App\Enums\UserRole::Manager], true))
  <form method="POST" action="{{ route('projects.tasks.retry', [$project, $task]) }}">@csrf<button class="text-xs text-brand-600 hover:underline ">Ulangi</button></form>
+ @endif
+ @if (in_array($task->status, [\App\Enums\TaskStatus::Failed, \App\Enums\TaskStatus::Done, \App\Enums\TaskStatus::Paused], true) && auth()->user()->can('manage', $project))
+ <details class="mt-1">
+ <summary class="cursor-pointer text-xs text-brand-600 hover:underline ">Revisi</summary>
+ <form method="POST" action="{{ route('projects.tasks.revise', [$project, $task]) }}" class="mt-1 flex gap-1">
+ @csrf
+ <input name="note" required maxlength="2000" placeholder="Perintah revisi untuk agen…" class="flex-1 rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs ">
+ <button class="rounded-md bg-brand-600 px-2 py-1 text-xs font-medium text-white hover:bg-brand-700">Kirim</button>
+ </form>
+ </details>
  @endif
  </td>
  </tr>
