@@ -9,12 +9,14 @@ use App\Jobs\RunAgentTask;
 use App\Models\Cost;
 use App\Models\Project;
 use App\Models\ProjectMember;
+use App\Models\Revision;
 use App\Models\Role;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\Aios\GitService;
 use App\Services\Aios\NaturalCommandTranslator;
 use App\Services\Aios\Orchestrator;
+use App\Services\Aios\PmDispatcher;
 use App\Services\Aios\SandboxService;
 use App\Services\NineRouter\NineRouterClient;
 use App\Services\SettingsService;
@@ -172,7 +174,9 @@ class RemainingScopeTest extends TestCase
 
         app(Orchestrator::class)->revise($task, 'Tambahkan aktor admin.');
         $this->assertSame(TaskStatus::Queued, $task->fresh()->status);
-
+        $revision = Revision::where('task_id', $task->id)->firstOrFail();
+        $this->assertSame('Tambahkan aktor admin.', $revision->note);
+        $this->assertNull($revision->user_id);
         Http::assertSentCount(0);
         $job = new RunAgentTask($task->fresh());
         $job->handle(app(Orchestrator::class), app(NineRouterClient::class), app(SettingsService::class), app(GitService::class), app(SandboxService::class));
@@ -197,5 +201,29 @@ class RemainingScopeTest extends TestCase
             ->assertRedirect(route('projects.show', $project));
 
         $this->assertSame('queued', $task->fresh()->status->value);
+        $revision = Revision::where('task_id', $task->id)->firstOrFail();
+        $this->assertSame($owner->id, (int) $revision->user_id);
+
+        // Halaman proyek menampilkan riwayat revisi.
+        $this->actingAs($owner)->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('Riwayat revisi (1)')
+            ->assertSee('Tambahkan kriteria penerimaan.');
+    }
+
+    public function test_pm_uses_existing_project_instead_of_inbox(): void
+    {
+        config(['aios.nine_router.mock' => true]);
+        $room = Room::factory()->create(['number' => '07']);
+        $role = Role::where('slug', 'backend-dev')->first();
+        $room->agents()->create(['slug' => 'be-1', 'name' => 'BE', 'role_id' => $role->id]);
+        $project = Project::factory()->create(['room_id' => $room->id, 'status' => ProjectStatus::Done]);
+
+        $countBefore = Project::where('room_id', $room->id)->count();
+        app(PmDispatcher::class)->dispatch($room, 'perbaiki API');
+
+        $this->assertSame($countBefore, Project::where('room_id', $room->id)->count());
+        $this->assertSame('running', $project->fresh()->status->value);
+        $this->assertSame(1, $project->tasks()->count());
     }
 }

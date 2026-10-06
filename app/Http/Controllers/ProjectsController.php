@@ -11,11 +11,14 @@ use App\Models\ProjectMember;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\Aios\CommandException;
+use App\Services\Aios\GitService;
 use App\Services\Aios\Orchestrator;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use League\CommonMark\CommonMarkConverter;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ProjectsController extends Controller
 {
@@ -40,11 +43,30 @@ class ProjectsController extends Controller
     public function show(Project $project, Orchestrator $orchestrator): View
     {
         $this->authorize('view', $project);
-        $project->load(['room', 'tasks.agent', 'tasks.output', 'approvals.requester', 'members.user']);
+        $project->load(['room', 'tasks.agent', 'tasks.output', 'approvals.requester', 'members.user', 'revisions.task', 'revisions.user']);
 
         $done = $project->tasks->where('status', TaskStatus::Done)->count();
         $total = max($project->tasks->count(), 1);
         $spent = $project->costs()->sum('tokens_in') + $project->costs()->sum('tokens_out');
+
+        $types = $project->artifacts()->select('type')->distinct()->orderBy('type')->pluck('type')->all();
+        $previewType = request('preview');
+        $preferred = ['wireframe', 'ux-flow', 'frontend-code', 'prd'];
+
+        if (! in_array($previewType, $types, true)) {
+            $previewType = null;
+
+            foreach ([...$preferred, ...$types] as $candidate) {
+                if (in_array($candidate, $types, true)) {
+                    $previewType = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $previewArtifact = $previewType !== null
+            ? $project->artifacts()->where('type', $previewType)->latest('version')->first()
+            : null;
 
         return view('projects.show', [
             'project' => $project,
@@ -54,6 +76,10 @@ class ProjectsController extends Controller
             'customPipeline' => $project->stages !== null,
             'tokensSpent' => $spent,
             'agentProgress' => $orchestrator->progress($project),
+            'previewTypes' => $types,
+            'previewType' => $previewType,
+            'previewHtml' => $previewArtifact !== null ? (string) (new CommonMarkConverter)->convert($previewArtifact->body ?? '') : null,
+            'previewVersion' => $previewArtifact?->version,
         ]);
     }
 
@@ -122,6 +148,16 @@ class ProjectsController extends Controller
         return redirect()->route('projects.show', $project)->with('status', "Tahap {$task->title} diantre ulang.");
     }
 
+    public function download(Project $project, GitService $git): BinaryFileResponse
+    {
+        $this->authorize('manage', $project);
+        abort_unless(is_dir($git->repoPath($project).'/.git'), 404, 'Repositori proyek belum ada.');
+
+        $zipPath = $git->archive($project);
+
+        return response()->download($zipPath, $project->slug.'.zip')->deleteFileAfterSend(true);
+    }
+
     public function revise(Request $request, Project $project, Task $task, Orchestrator $orchestrator): RedirectResponse
     {
         abort_unless($task->project_id === $project->id, 404);
@@ -129,7 +165,7 @@ class ProjectsController extends Controller
         $validated = $request->validate(['note' => ['required', 'string', 'max:2000']]);
 
         try {
-            $orchestrator->revise($task, $validated['note']);
+            $orchestrator->revise($task, $validated['note'], (int) auth()->id());
         } catch (CommandException $e) {
             return back()->withErrors(['revision' => $e->getMessage()]);
         }

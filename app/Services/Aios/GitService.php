@@ -6,8 +6,12 @@ use App\Models\Artifact;
 use App\Models\Project;
 use App\Models\Task;
 use App\Services\SettingsService;
+use FilesystemIterator;
 use Illuminate\Support\Facades\File;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use Symfony\Component\Process\Process;
+use ZipArchive;
 
 /**
  * Repositori Git per proyek (PRD FR-16).
@@ -88,6 +92,45 @@ class GitService
         $safe = str($artifact->type)->slug('_')->toString();
 
         return "{$safe}-v{$artifact->version}.md";
+    }
+
+    /**
+     * Arsip ZIP repo untuk tombol Download (tanpa .git).
+     * Mengembalikan path berkas sementara; pemanggil yang menghapus.
+     */
+    public function archive(Project $project): string
+    {
+        $path = $this->repoPath($project);
+
+        if (! is_dir($path.'/.git')) {
+            throw new CommandException('Repositori proyek belum ada.');
+        }
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'aios-').'.zip';
+        $zip = new ZipArchive;
+
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new CommandException('Gagal membuat arsip unduhan.');
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+
+        foreach ($iterator as $file) {
+            $relative = substr($file->getPathname(), strlen($path) + 1);
+
+            if ($relative === false || str_starts_with($relative, '.git')) {
+                continue;
+            }
+
+            $zip->addFile($file->getPathname(), $project->slug.'/'.str_replace('\\', '/', $relative));
+        }
+
+        $zip->close();
+
+        return $zipPath;
     }
 
     private function run(string $path, array $command): string

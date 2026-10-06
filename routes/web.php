@@ -22,7 +22,6 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/projects', [ProjectsController::class, 'index'])->name('projects.index');
     Route::get('/projects/{project:slug}', [ProjectsController::class, 'show'])->name('projects.show');
-
     Route::get('/approvals', [ApprovalsController::class, 'index'])->name('approvals.index');
     Route::get('/roles', [RolesController::class, 'index'])->name('roles.index');
     Route::get('/costs', [CostsController::class, 'index'])->name('costs.index');
@@ -48,6 +47,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/projects/{project:slug}/cancel', [ProjectsController::class, 'cancel'])->name('projects.cancel');
         Route::post('/projects/{project:slug}/tasks/{task}/retry', [ProjectsController::class, 'retry'])->name('projects.tasks.retry');
         Route::post('/projects/{project:slug}/tasks/{task}/revise', [ProjectsController::class, 'revise'])->name('projects.tasks.revise');
+        Route::get('/projects/{project:slug}/download', [ProjectsController::class, 'download'])->name('projects.download');
         Route::post('/projects/{project:slug}/members', [ProjectsController::class, 'storeMember'])->name('projects.members.store');
         Route::delete('/projects/{project:slug}/members/{member}', [ProjectsController::class, 'destroyMember'])->name('projects.members.destroy');
         Route::post('/projects/{project:slug}/stages/{stage}/move/{direction}', [ProjectsController::class, 'moveStage'])->name('projects.stages.move');

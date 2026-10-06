@@ -9,6 +9,7 @@ use App\Services\Aios\SandboxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\ManagesTestRepos;
 use Tests\TestCase;
+use ZipArchive;
 
 class SandboxTest extends TestCase
 {
@@ -93,5 +94,32 @@ class SandboxTest extends TestCase
         $report = app(SandboxService::class)->verify($project);
 
         $this->assertFalse($report['ok']);
+    }
+
+    public function test_archive_contains_files_without_git(): void
+    {
+        $project = Project::factory()->create(['room_id' => Room::factory()->create()->id, 'slug' => 'demo']);
+        $git = app(GitService::class);
+        $git->init($project);
+
+        $task = $project->tasks()->create(['stage' => 'prd', 'title' => 'PRD', 'step' => 3]);
+        $artifact = $project->artifacts()->create([
+            'room_id' => $project->room_id, 'type' => 'prd', 'title' => 'PRD', 'body' => '# PRD',
+        ]);
+        $git->commitTask($task, $artifact);
+
+        $zipPath = $git->archive($project);
+
+        $zip = new ZipArchive;
+        $this->assertTrue($zip->open($zipPath));
+        $names = [];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $names[] = $zip->getNameIndex($i);
+        }
+        $zip->close();
+        unlink($zipPath);
+
+        $this->assertContains('demo/artefak/prd-v1.md', $names);
+        $this->assertFalse(collect($names)->contains(fn ($name) => str_starts_with($name, 'demo/.git')));
     }
 }

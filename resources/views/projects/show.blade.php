@@ -13,6 +13,7 @@
  <span class="text-xs text-zinc-500 ">{{ $progress }}%</span>
  @if (in_array(auth()->user()->role, [\App\Enums\UserRole::Owner, \App\Enums\UserRole::Manager], true))
  <span class="ml-auto flex gap-2">
+ <a href="{{ route('projects.download', $project) }}" class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 ">Download</a>
  @if ($project->status === \App\Enums\ProjectStatus::Running)
  <form method="POST" action="{{ route('projects.pause', $project) }}">@csrf<button class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 ">Jeda</button></form>
  @endif
@@ -105,6 +106,19 @@
  </ul>
  </section>
  @endif
+ @if ($previewHtml !== null)
+ <section class="overflow-hidden rounded-md border border-zinc-200 bg-white ">
+ <div class="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3">
+ <h2 class="font-semibold ">Preview {{ $previewType }} <span class="text-xs font-normal text-zinc-400 ">v{{ $previewVersion }}</span></h2>
+ <span class="ml-auto flex gap-1">
+ @foreach ($previewTypes as $type)
+ <a href="{{ route('projects.show', [$project, 'preview' => $type]) }}" class="rounded-md px-2 py-0.5 text-xs {{ $type === $previewType ? 'bg-zinc-900 text-white ' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200 ' }}">{{ $type }}</a>
+ @endforeach
+ </span>
+ </div>
+ <div class="max-w-none px-4 py-3 text-sm [&_h1]:mb-2 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mb-1 [&_h2]:mt-3 [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-2 [&_h3]:font-medium [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-inside [&_ul]:list-disc [&_ol]:mb-2 [&_ol]:list-inside [&_ol]:list-decimal [&_code]:rounded [&_code]:bg-zinc-100 [&_code]:px-1 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-zinc-100 [&_pre]:p-3">{!! $previewHtml !!}</div>
+ </section>
+ @endif
  <section class="overflow-hidden rounded-md border border-zinc-200 bg-white ">
  <h2 class="border-b border-zinc-200 px-4 py-3 font-semibold ">Linimasa tahap</h2>
  <table class="w-full text-left text-sm">
@@ -176,5 +190,20 @@
  </form>
  </section>
  @endcan
+ <section class="rounded-md border border-zinc-200 bg-white p-4 ">
+ <h2 class="mb-3 font-semibold ">Riwayat revisi ({{ $project->revisions->count() }})</h2>
+ @if ($project->revisions->isEmpty())
+ <p class="text-sm text-zinc-500 ">Belum ada revisi.</p>
+ @else
+ <ul class="flex flex-col gap-2">
+ @foreach ($project->revisions->sortByDesc('created_at')->take(20) as $revision)
+ <li class="rounded-md bg-zinc-50 px-3 py-2 text-sm ">
+ <p>{{ $revision->note }}</p>
+ <p class="mt-1 text-xs text-zinc-400 ">Tahap {{ $revision->task->title ?? '-' }} · {{ $revision->artifact_version ? 'dari v'.$revision->artifact_version : '' }} · {{ $revision->user?->name ?? 'konsol' }} · {{ $revision->created_at->diffForHumans() }}</p>
+ </li>
+ @endforeach
+ </ul>
+ @endif
+ </section>
 </div>
 @endsection

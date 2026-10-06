@@ -50,6 +50,11 @@ class Project extends Model
         return $this->hasMany(Task::class);
     }
 
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(Revision::class);
+    }
+
     public function artifacts(): HasMany
     {
         return $this->hasMany(Artifact::class);

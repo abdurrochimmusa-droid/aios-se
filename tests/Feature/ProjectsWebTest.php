@@ -8,12 +8,15 @@ use App\Models\Approval;
 use App\Models\Project;
 use App\Models\Room;
 use App\Models\User;
+use App\Services\Aios\GitService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\ManagesTestRepos;
 use Tests\TestCase;
 
 class ProjectsWebTest extends TestCase
 {
+    use ManagesTestRepos;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -79,5 +82,41 @@ class ProjectsWebTest extends TestCase
 
         $this->actingAs($owner)->post(route('projects.cancel', $project))->assertRedirect();
         $this->assertSame('done', $project->fresh()->status->value);
+    }
+
+    public function test_preview_renders_latest_wireframe(): void
+    {
+        $viewer = User::factory()->create(['role' => UserRole::Viewer]);
+        $project = Project::factory()->create(['room_id' => Room::factory()->create()->id]);
+        $project->members()->create(['user_id' => $viewer->id, 'role' => UserRole::Viewer]);
+        $project->artifacts()->create(['room_id' => $project->room_id, 'type' => 'wireframe', 'title' => 'W', 'body' => '# Layar utama']);
+
+        $this->actingAs($viewer)->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('Preview wireframe', false)
+            ->assertSee('<h1>Layar utama</h1>', false);
+    }
+
+    public function test_download_returns_zip_and_viewer_forbidden(): void
+    {
+        config(['aios.projects_root' => $this->repoRoot()]);
+        $owner = $this->owner();
+        $viewer = User::factory()->create(['role' => UserRole::Viewer]);
+        $project = Project::factory()->create(['room_id' => Room::factory()->create()->id, 'slug' => 'demo']);
+        $project->members()->create(['user_id' => $viewer->id, 'role' => UserRole::Viewer]);
+
+        $git = app(GitService::class);
+        $git->init($project);
+        $task = $project->tasks()->create(['stage' => 'prd', 'title' => 'PRD', 'step' => 3]);
+        $artifact = $project->artifacts()->create(['room_id' => $project->room_id, 'type' => 'prd', 'title' => 'PRD', 'body' => '# PRD']);
+        $git->commitTask($task, $artifact);
+
+        $this->actingAs($viewer)->get(route('projects.download', $project))->assertForbidden();
+
+        $response = $this->actingAs($owner)->get(route('projects.download', $project));
+        $response->assertOk();
+        $this->assertStringContainsString('demo.zip', (string) $response->headers->get('content-disposition'));
+
+        $this->clearRepoRoot(config('aios.projects_root'));
     }
 }

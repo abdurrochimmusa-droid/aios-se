@@ -106,6 +106,15 @@ class PmDispatcher
 
     private function inbox(Room $room): Project
     {
+        // Tetap satu proyek per alur kerja: pakai proyek terakhir room bila
+        // ada (dibuka kembali bila sudah selesai), inbox hanya bila room
+        // belum pernah punya proyek.
+        $existing = $room->projects()->latest()->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
         return Project::firstOrCreate(
             ['slug' => 'inbox-room-'.$room->number],
             [

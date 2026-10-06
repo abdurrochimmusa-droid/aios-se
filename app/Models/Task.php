@@ -56,6 +56,11 @@ class Task extends Model
         return $this->hasMany(Task::class, 'parent_id');
     }
 
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(Revision::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->whereIn('status', [TaskStatus::Queued, TaskStatus::Running, TaskStatus::WaitingApproval]);

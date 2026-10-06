@@ -9,6 +9,7 @@ use App\Jobs\RunAgentTask;
 use App\Models\Agent;
 use App\Models\Approval;
 use App\Models\Project;
+use App\Models\Revision;
 use App\Models\Task;
 use App\Services\SettingsService;
 
@@ -253,8 +254,9 @@ class Orchestrator
     /**
      * Perintah revisi manusia saat hasil tahap salah: tugas diantre ulang
      * dengan catatan yang dibaca agen. Versi artefak naik saat selesai.
+     * Perintah dicatat di riwayat revisi proyek (tidak menambah proyek).
      */
-    public function revise(Task $task, string $note): void
+    public function revise(Task $task, string $note, ?int $userId = null): void
     {
         $note = trim($note);
 
@@ -265,6 +267,14 @@ class Orchestrator
         if (! in_array($task->status, [TaskStatus::Failed, TaskStatus::Done, TaskStatus::Paused], true)) {
             throw new CommandException("Tahap '{$task->title}' berstatus {$task->status->value}; revisi hanya untuk yang gagal/selesai/dijeda.");
         }
+
+        Revision::create([
+            'project_id' => $task->project_id,
+            'task_id' => $task->id,
+            'user_id' => $userId,
+            'note' => $note,
+            'artifact_version' => $task->output?->version,
+        ]);
 
         $task->status = TaskStatus::Queued;
         $task->error = null;
