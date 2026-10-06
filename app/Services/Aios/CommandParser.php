@@ -23,6 +23,7 @@ class CommandParser
         'role' => ['add'],
         'project' => ['run', 'progress'],
         'task' => ['revise'],
+        'pm' => ['send'],
     ];
 
     public function parse(string $input): array

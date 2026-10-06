@@ -106,6 +106,27 @@ class RoomsController extends Controller
         return redirect()->route('rooms.show', $room)->with('status', $result['message']);
     }
 
+    public function storeDirective(Request $request, Room $room, CommandExecutor $executor): RedirectResponse
+    {
+        $validated = $request->validate(['instruction' => ['required', 'string', 'max:2000']]);
+
+        $result = $executor->run([
+            'type' => 'command',
+            'domain' => 'pm',
+            'action' => 'send',
+            'command' => 'pm.send',
+            'positional' => [$validated['instruction']],
+            'options' => ['room' => $room->number],
+            'raw' => "pm send --room {$room->number} '{$validated['instruction']}'",
+        ]);
+
+        if (! $result['ok']) {
+            return back()->withInput()->withErrors(['instruction' => $result['message']]);
+        }
+
+        return redirect()->route('rooms.show', $room)->with('status', $result['message']);
+    }
+
     public function archive(Room $room, CommandExecutor $executor): RedirectResponse
     {
         $result = $executor->run([

@@ -58,6 +58,7 @@ class CommandExecutor
                 'project.run' => $this->previewProjectRun($parsed),
                 'project.progress' => $this->previewProjectProgress($parsed),
                 'task.revise' => $this->previewTaskRevise($parsed),
+                'pm.send' => $this->previewPmSend($parsed),
                 default => $this->fail('Perintah tidak didukung.'),
             };
         } catch (CommandException $e) {
@@ -83,6 +84,7 @@ class CommandExecutor
                 'project.run' => $this->runProjectRun($parsed),
                 'project.progress' => $this->previewProjectProgress($parsed),
                 'task.revise' => $this->runTaskRevise($parsed),
+                'pm.send' => $this->runPmSend($parsed),
                 default => $this->fail('Perintah tidak didukung.'),
             });
         } catch (CommandException $e) {
@@ -553,6 +555,61 @@ class CommandExecutor
         $task = Task::find($id) ?? throw new CommandException("Tugas #{$id} tidak ditemukan.");
 
         return [$task, $note];
+    }
+
+    /** @return array{room: Room, project: ?Project, instruction: string} */
+    private function pmSendInput(array $parsed): array
+    {
+        $options = $parsed['options'];
+        $instruction = trim($parsed['positional'][0] ?? '');
+
+        if ($instruction === '') {
+            throw new CommandException("Perintah wajib: pm send --room 01 'perbaiki API login'.");
+        }
+
+        $room = isset($options['room'])
+            ? $this->findRoom((string) $options['room'])
+            : throw new CommandException("Room wajib: pm send --room 01 'perintah'.");
+
+        $project = isset($options['project']) ? $this->findProject((string) $options['project']) : null;
+
+        if ($project !== null && $project->room_id !== $room->id) {
+            throw new CommandException('Proyek itu bukan milik room tersebut.');
+        }
+
+        return [$room, $project, $instruction];
+    }
+
+    private function previewPmSend(array $parsed): array
+    {
+        [$room, $project, $instruction] = $this->pmSendInput($parsed);
+
+        try {
+            $preview = app(PmDispatcher::class)->preview($room, $instruction, $project);
+        } catch (CommandException $e) {
+            return $this->fail($e->getMessage());
+        }
+
+        $lines = ["Manager akan membagi tugas ke {$preview['project']->name}:"];
+
+        foreach ($preview['assignments'] as $item) {
+            $lines[] = "  '{$item['title']}' → {$item['agent']->slug}";
+        }
+
+        return ['ok' => true, 'message' => implode(PHP_EOL, $lines), 'data' => ['room' => $room->number]];
+    }
+
+    private function runPmSend(array $parsed): array
+    {
+        [$room, $project, $instruction] = $this->pmSendInput($parsed);
+
+        try {
+            $result = DB::transaction(fn () => app(PmDispatcher::class)->dispatch($room, $instruction, $project));
+        } catch (CommandException $e) {
+            return $this->fail($e->getMessage());
+        }
+
+        return ['ok' => true, 'message' => $result['message'], 'data' => ['room' => $room->number, 'tasks' => count($result['tasks'])]];
     }
 
     // ---- role ----

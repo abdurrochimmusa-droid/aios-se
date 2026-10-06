@@ -36,6 +36,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/rooms', [RoomsController::class, 'store'])->name('rooms.store');
         Route::post('/rooms/{room:number}/agents', [RoomsController::class, 'storeAgent'])->name('rooms.agents.store');
         Route::delete('/rooms/{room:number}/agents/{agent}', [RoomsController::class, 'destroyAgent'])->name('rooms.agents.destroy');
+        Route::post('/rooms/{room:number}/directives', [RoomsController::class, 'storeDirective'])->name('rooms.directives.store');
         Route::post('/rooms/{room:number}/archive', [RoomsController::class, 'archive'])->name('rooms.archive');
 
         Route::post('/console/run', [ConsoleController::class, 'run'])->name('console.run');

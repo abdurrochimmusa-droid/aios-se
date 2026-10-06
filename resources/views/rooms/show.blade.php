@@ -18,7 +18,17 @@
  @endif
  @endif
  </div>
-
+ @if (in_array(auth()->user()->role, [\App\Enums\UserRole::Owner, \App\Enums\UserRole::Manager], true))
+ <section class="rounded-md border border-brand-600/40 bg-white p-4 ">
+ <h2 class="mb-1 font-semibold ">Perintah ke Manager</h2>
+ <p class="mb-2 text-xs text-zinc-500 ">Satu kolom: tulis tujuan, manager membagi ke agen yang tepat.</p>
+ <form method="POST" action="{{ route('rooms.directives.store', $room) }}" class="flex gap-2">
+ @csrf
+ <input name="instruction" required maxlength="2000" placeholder="cth: perbaiki validasi email di backend lalu buatkan tesnya" autocomplete="off" class="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm ">
+ <button class="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">Kirim</button>
+ </form>
+ </section>
+ @endif
  <section class="rounded-md border border-zinc-200 bg-white p-4 ">
  <div class="mb-3 flex items-center justify-between">
  <h2 class="font-semibold">Agen ({{ $room->agents->count() }})</h2>
